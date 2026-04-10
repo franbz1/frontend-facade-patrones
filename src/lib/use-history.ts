@@ -13,9 +13,12 @@ export function useHistoryData() {
   const [history, setHistory] = useState<CompleteHistoryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const patientId = session?.patientId ?? null;
+  const accessToken = session?.accessToken ?? null;
+  const hasPatientProfile = session?.patient != null;
 
   const loadHistory = useCallback(async () => {
-    if (!session) {
+    if (!patientId || !accessToken) {
       console.info("[history] load:skipped-no-session");
       setIsLoading(false);
       return;
@@ -24,15 +27,12 @@ export function useHistoryData() {
     setIsLoading(true);
     setError(null);
     console.info("[history] load:start", {
-      patientId: session.patientId,
-      hasPatientProfile: session.patient != null,
+      patientId,
+      hasPatientProfile,
     });
 
     try {
-      const response = await getCompleteHistory(
-        session.patientId,
-        session.accessToken,
-      );
+      const response = await getCompleteHistory(patientId, accessToken);
 
       console.info("[history] load:success", {
         patientId: response.patient.id,
@@ -60,7 +60,14 @@ export function useHistoryData() {
     } finally {
       setIsLoading(false);
     }
-  }, [logout, router, session, updatePatientProfile]);
+  }, [
+    accessToken,
+    hasPatientProfile,
+    logout,
+    patientId,
+    router,
+    updatePatientProfile,
+  ]);
 
   useEffect(() => {
     void loadHistory();

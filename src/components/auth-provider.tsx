@@ -161,10 +161,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updatePatientProfile = useCallback((patient: PatientProfile) => {
     updateActiveSession((currentSession) =>
       currentSession
-        ? {
-            ...currentSession,
-            patient,
-          }
+        ? currentSession.patient != null &&
+          currentSession.patient.id === patient.id &&
+          currentSession.patient.firstName === patient.firstName &&
+          currentSession.patient.lastName === patient.lastName &&
+          currentSession.patient.document === patient.document &&
+          currentSession.patient.email === patient.email &&
+          currentSession.patient.phone === patient.phone &&
+          JSON.stringify(currentSession.patient.allergies) ===
+            JSON.stringify(patient.allergies)
+          ? currentSession
+          : {
+              ...currentSession,
+              patient,
+            }
         : currentSession,
     );
   }, []);
