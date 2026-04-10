@@ -13,6 +13,7 @@ export function PublicRoute({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "authenticated") {
+      console.info("[route-guard] public-route:redirect-dashboard");
       router.replace("/dashboard");
     }
   }, [router, status]);
@@ -37,6 +38,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status === "unauthenticated") {
       const redirect = encodeURIComponent(pathname || "/dashboard");
+      console.warn("[route-guard] protected-route:redirect-login", {
+        pathname,
+      });
       router.replace(`/login?redirect=${redirect}`);
     }
   }, [pathname, router, status]);

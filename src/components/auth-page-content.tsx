@@ -2,7 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -29,7 +29,6 @@ const initialRegisterValues: RegisterValues = {
 };
 
 export function AuthPageContent({ mode }: { mode: AuthMode }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { login, register } = useAuth();
   const [healthState, setHealthState] = useState<HealthState>("checking");
@@ -101,10 +100,21 @@ export function AuthPageContent({ mode }: { mode: AuthMode }) {
     setIsSubmitting(true);
 
     try {
+      console.info("[login-page] submit:start", {
+        identifier: loginValues.identifier,
+        redirectPath,
+      });
       await login(loginValues);
+      console.info("[login-page] submit:success", {
+        redirectPath,
+      });
       setFormMessage("Ingreso exitoso. Te estamos llevando a tu inicio.");
-      router.replace(redirectPath);
+      console.info("[login-page] redirect:navigate", {
+        redirectPath,
+      });
+      window.location.assign(redirectPath);
     } catch (error) {
+      console.error("[login-page] submit:error", error);
       setFormError(
         error instanceof Error ? error.message : "No fue posible iniciar sesion.",
       );
@@ -126,6 +136,10 @@ export function AuthPageContent({ mode }: { mode: AuthMode }) {
     setIsSubmitting(true);
 
     try {
+      console.info("[register-page] submit:start", {
+        document: registerValues.document,
+        email: registerValues.email,
+      });
       const patient = await register({
         firstName: registerValues.firstName.trim(),
         lastName: registerValues.lastName.trim(),
@@ -142,8 +156,15 @@ export function AuthPageContent({ mode }: { mode: AuthMode }) {
       setFormMessage(
         `${patient.firstName} ${patient.lastName}, tu registro fue creado correctamente.`,
       );
-      router.replace("/dashboard");
+      console.info("[register-page] submit:success", {
+        patientId: patient.id,
+      });
+      console.info("[register-page] redirect:navigate", {
+        redirectPath: "/dashboard",
+      });
+      window.location.assign("/dashboard");
     } catch (error) {
+      console.error("[register-page] submit:error", error);
       setFormError(
         error instanceof Error ? error.message : "No fue posible completar el registro.",
       );

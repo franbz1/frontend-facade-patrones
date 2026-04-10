@@ -16,12 +16,17 @@ export function useHistoryData() {
 
   const loadHistory = useCallback(async () => {
     if (!session) {
+      console.info("[history] load:skipped-no-session");
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    console.info("[history] load:start", {
+      patientId: session.patientId,
+      hasPatientProfile: session.patient != null,
+    });
 
     try {
       const response = await getCompleteHistory(
@@ -29,10 +34,19 @@ export function useHistoryData() {
         session.accessToken,
       );
 
+      console.info("[history] load:success", {
+        patientId: response.patient.id,
+        consultations: response.consultations.length,
+        pastAppointments: response.pastAppointments.length,
+        prescriptions: response.prescriptions.length,
+        laboratoryOrders: response.laboratoryOrders.length,
+      });
       setHistory(response);
       updatePatientProfile(response.patient);
     } catch (fetchError) {
+      console.error("[history] load:error", fetchError);
       if (fetchError instanceof ApiError && fetchError.status === 401) {
+        console.warn("[history] load:unauthorized-redirect");
         await logout();
         router.replace("/login");
         return;

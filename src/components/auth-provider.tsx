@@ -17,8 +17,6 @@ import {
   updateActiveSession,
 } from "@/lib/auth-storage";
 import {
-  ApiError,
-  getCompleteHistory,
   loginPatient,
   logoutPatient,
   registerPatient,
@@ -58,63 +56,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : "unauthenticated";
 
   const login = useCallback(async (values: LoginValues) => {
-    const loginResponse = await loginPatient(values);
-    const nextSession: AuthSession = {
-      accessToken: loginResponse.accessToken,
-      tokenType: loginResponse.tokenType,
-      expiresAt: loginResponse.expiresAt,
-      username: loginResponse.username,
-      patientId: loginResponse.patientId,
-      roles: loginResponse.roles,
-      signedInAt: new Date().toISOString(),
-      patient: null,
-    };
-
-    saveActiveSession(nextSession);
+    console.info("[auth] login:start", {
+      identifier: values.identifier,
+    });
 
     try {
-      const history = await getCompleteHistory(
-        loginResponse.patientId,
-        loginResponse.accessToken,
-      );
+      const loginResponse = await loginPatient(values);
 
-      updateActiveSession((currentSession) =>
-        currentSession
-          ? {
-              ...currentSession,
-              patient: history.patient,
-            }
-          : currentSession,
-      );
+      console.info("[auth] login:success", {
+        username: loginResponse.username,
+        patientId: loginResponse.patientId,
+        expiresAt: loginResponse.expiresAt,
+        roles: loginResponse.roles,
+      });
+
+      saveActiveSession({
+        accessToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresAt: loginResponse.expiresAt,
+        username: loginResponse.username,
+        patientId: loginResponse.patientId,
+        roles: loginResponse.roles,
+        signedInAt: new Date().toISOString(),
+        patient: null,
+      });
+
+      console.info("[auth] session:saved", {
+        patientId: loginResponse.patientId,
+      });
     } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 401) {
-        return;
-      }
-
-      clearActiveSession();
+      console.error("[auth] login:error", error);
       throw error;
     }
   }, []);
 
   const register = useCallback(async (values: RegisterValues) => {
-    const patient = await registerPatient(values);
-    const loginResponse = await loginPatient({
-      identifier: values.document,
-      password: values.password,
+    console.info("[auth] register:start", {
+      document: values.document,
+      email: values.email,
     });
 
-    saveActiveSession({
-      accessToken: loginResponse.accessToken,
-      tokenType: loginResponse.tokenType,
-      expiresAt: loginResponse.expiresAt,
-      username: loginResponse.username,
-      patientId: loginResponse.patientId,
-      roles: loginResponse.roles,
-      signedInAt: new Date().toISOString(),
-      patient,
-    });
+    try {
+      const patient = await registerPatient(values);
 
-    return patient;
+      console.info("[auth] register:patient-created", {
+        patientId: patient.id,
+        document: patient.document,
+      });
+
+      const loginResponse = await loginPatient({
+        identifier: values.document,
+        password: values.password,
+      });
+
+      console.info("[auth] register:auto-login-success", {
+        username: loginResponse.username,
+        patientId: loginResponse.patientId,
+      });
+
+      saveActiveSession({
+        accessToken: loginResponse.accessToken,
+        tokenType: loginResponse.tokenType,
+        expiresAt: loginResponse.expiresAt,
+        username: loginResponse.username,
+        patientId: loginResponse.patientId,
+        roles: loginResponse.roles,
+        signedInAt: new Date().toISOString(),
+        patient,
+      });
+
+      console.info("[auth] session:saved", {
+        patientId: loginResponse.patientId,
+      });
+
+      return patient;
+    } catch (error) {
+      console.error("[auth] register:error", error);
+      throw error;
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -122,13 +141,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (activeSession) {
       try {
+        console.info("[auth] logout:start", {
+          patientId: activeSession.patientId,
+        });
         await logoutPatient(activeSession.accessToken);
+        console.info("[auth] logout:remote-success", {
+          patientId: activeSession.patientId,
+        });
       } catch {
         // Always clear local session even if the API token is already invalid.
+        console.warn("[auth] logout:remote-failed");
       }
     }
 
     clearActiveSession();
+    console.info("[auth] session:cleared");
   }, []);
 
   const updatePatientProfile = useCallback((patient: PatientProfile) => {
