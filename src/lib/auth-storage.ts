@@ -4,27 +4,11 @@ import type {
 
 const SESSION_STORAGE_KEY = "medical-portal.session";
 const sessionListeners = new Set<() => void>();
+let cachedSessionRaw: string | null | undefined;
+let cachedSession: AuthSession | null | undefined;
 
 function isBrowser() {
   return typeof window !== "undefined";
-}
-
-function readJson<T>(storageKey: string, fallback: T): T {
-  if (!isBrowser()) {
-    return fallback;
-  }
-
-  const rawValue = window.localStorage.getItem(storageKey);
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(rawValue) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 function writeJson(storageKey: string, value: unknown) {
@@ -43,21 +27,41 @@ function isSessionExpired(session: AuthSession) {
   return new Date(session.expiresAt).getTime() <= Date.now();
 }
 
+function readCachedSession() {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  const rawValue = window.localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (rawValue === cachedSessionRaw && cachedSession !== undefined) {
+    return cachedSession;
+  }
+
+  cachedSessionRaw = rawValue;
+
+  if (!rawValue) {
+    cachedSession = null;
+    return cachedSession;
+  }
+
+  try {
+    const parsedSession = JSON.parse(rawValue) as AuthSession;
+    cachedSession = isSessionExpired(parsedSession) ? null : parsedSession;
+    return cachedSession;
+  } catch {
+    cachedSession = null;
+    return cachedSession;
+  }
+}
+
 export function getActiveSession() {
-  const session = readJson<AuthSession | null>(SESSION_STORAGE_KEY, null);
-
-  if (!session) {
-    return null;
-  }
-
-  if (isSessionExpired(session)) {
-    return null;
-  }
-
-  return session;
+  return readCachedSession();
 }
 
 export function saveActiveSession(session: AuthSession) {
+  cachedSessionRaw = JSON.stringify(session);
+  cachedSession = session;
   writeJson(SESSION_STORAGE_KEY, session);
   notifySessionListeners();
 }
@@ -67,6 +71,8 @@ export function clearActiveSession() {
     return;
   }
 
+  cachedSessionRaw = null;
+  cachedSession = null;
   window.localStorage.removeItem(SESSION_STORAGE_KEY);
   notifySessionListeners();
 }
@@ -81,6 +87,8 @@ export function updateActiveSession(
     return;
   }
 
+  cachedSessionRaw = JSON.stringify(nextSession);
+  cachedSession = nextSession;
   writeJson(SESSION_STORAGE_KEY, nextSession);
   notifySessionListeners();
 }
