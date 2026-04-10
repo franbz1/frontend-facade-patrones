@@ -10,15 +10,19 @@ import {
 } from "react";
 
 import {
-  buildStoredAccount,
   clearActiveSession,
-  findStoredAccount,
   getActiveSession,
   saveActiveSession,
-  saveStoredAccount,
   subscribeToActiveSession,
+  updateActiveSession,
 } from "@/lib/auth-storage";
-import { registerPatient } from "@/lib/spring-api";
+import {
+  ApiError,
+  getCompleteHistory,
+  loginPatient,
+  logoutPatient,
+  registerPatient,
+} from "@/lib/spring-api";
 import type {
   AuthSession,
   LoginValues,
@@ -33,51 +37,109 @@ type AuthContextValue = {
   session: AuthSession | null;
   login: (values: LoginValues) => Promise<void>;
   register: (values: RegisterValues) => Promise<PatientProfile>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  updatePatientProfile: (patient: PatientProfile) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const emptySubscribe = () => () => undefined;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const session = useSyncExternalStore(
     subscribeToActiveSession,
     getActiveSession,
     () => null,
   );
-  const status: AuthStatus = session ? "authenticated" : "unauthenticated";
+  const status: AuthStatus = !isClient
+    ? "loading"
+    : session
+      ? "authenticated"
+      : "unauthenticated";
 
   const login = useCallback(async (values: LoginValues) => {
-    const storedAccount = findStoredAccount(values);
-
-    if (!storedAccount) {
-      throw new Error(
-        "User not found on this device yet. Register first or wait for the backend auth endpoint.",
-      );
-    }
-
+    const loginResponse = await loginPatient(values);
     const nextSession: AuthSession = {
-      patient: storedAccount.patient,
+      accessToken: loginResponse.accessToken,
+      tokenType: loginResponse.tokenType,
+      expiresAt: loginResponse.expiresAt,
+      username: loginResponse.username,
+      patientId: loginResponse.patientId,
+      roles: loginResponse.roles,
       signedInAt: new Date().toISOString(),
+      patient: null,
     };
 
     saveActiveSession(nextSession);
+
+    try {
+      const history = await getCompleteHistory(
+        loginResponse.patientId,
+        loginResponse.accessToken,
+      );
+
+      updateActiveSession((currentSession) =>
+        currentSession
+          ? {
+              ...currentSession,
+              patient: history.patient,
+            }
+          : currentSession,
+      );
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        return;
+      }
+
+      clearActiveSession();
+      throw error;
+    }
   }, []);
 
   const register = useCallback(async (values: RegisterValues) => {
     const patient = await registerPatient(values);
-    const nextSession: AuthSession = {
-      patient,
-      signedInAt: new Date().toISOString(),
-    };
+    const loginResponse = await loginPatient({
+      identifier: values.document,
+      password: values.password,
+    });
 
-    saveStoredAccount(buildStoredAccount(patient));
-    saveActiveSession(nextSession);
+    saveActiveSession({
+      accessToken: loginResponse.accessToken,
+      tokenType: loginResponse.tokenType,
+      expiresAt: loginResponse.expiresAt,
+      username: loginResponse.username,
+      patientId: loginResponse.patientId,
+      roles: loginResponse.roles,
+      signedInAt: new Date().toISOString(),
+      patient,
+    });
 
     return patient;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const activeSession = getActiveSession();
+
+    if (activeSession) {
+      try {
+        await logoutPatient(activeSession.accessToken);
+      } catch {
+        // Always clear local session even if the API token is already invalid.
+      }
+    }
+
     clearActiveSession();
+  }, []);
+
+  const updatePatientProfile = useCallback((patient: PatientProfile) => {
+    updateActiveSession((currentSession) =>
+      currentSession
+        ? {
+            ...currentSession,
+            patient,
+          }
+        : currentSession,
+    );
   }, []);
 
   const value = useMemo(
@@ -87,8 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      updatePatientProfile,
     }),
-    [login, logout, register, session, status],
+    [login, logout, register, session, status, updatePatientProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const springApiUrl =
+  process.env.SPRING_API_URL?.replace(/\/$/, "") ??
   process.env.NEXT_PUBLIC_SPRING_API_URL?.replace(/\/$/, "") ??
   "http://localhost:8080";
 

@@ -9,8 +9,8 @@ export type PatientProfile = {
 };
 
 export type LoginValues = {
-  email: string;
-  document: string;
+  identifier: string;
+  password: string;
 };
 
 export type RegisterValues = {
@@ -19,17 +19,31 @@ export type RegisterValues = {
   document: string;
   email: string;
   phone: string;
+  password: string;
   allergies: string[];
 };
 
-export type AuthSession = {
-  patient: PatientProfile;
-  signedInAt: string;
+export type LoginResponse = {
+  accessToken: string;
+  tokenType: string;
+  expiresAt: string;
+  username: string;
+  patientId: number;
+  roles: string[];
 };
 
-export type StoredAccount = {
-  patient: PatientProfile;
-  emailKey: string;
-  documentKey: string;
-  registeredAt: string;
+export type LogoutResponse = {
+  message: string;
+  loggedOutAt: string;
+};
+
+export type AuthSession = {
+  accessToken: string;
+  tokenType: string;
+  expiresAt: string;
+  username: string;
+  patientId: number;
+  roles: string[];
+  signedInAt: string;
+  patient: PatientProfile | null;
 };

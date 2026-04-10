@@ -1,24 +1,12 @@
 import type {
   AuthSession,
-  LoginValues,
-  PatientProfile,
-  StoredAccount,
 } from "@/types/auth";
 
-const ACCOUNTS_STORAGE_KEY = "medical-portal.accounts";
 const SESSION_STORAGE_KEY = "medical-portal.session";
 const sessionListeners = new Set<() => void>();
 
 function isBrowser() {
   return typeof window !== "undefined";
-}
-
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizeDocument(value: string) {
-  return value.replace(/\s+/g, "").trim().toLowerCase();
 }
 
 function readJson<T>(storageKey: string, fallback: T): T {
@@ -51,40 +39,22 @@ function notifySessionListeners() {
   sessionListeners.forEach((listener) => listener());
 }
 
-export function buildStoredAccount(patient: PatientProfile): StoredAccount {
-  return {
-    patient,
-    emailKey: normalizeEmail(patient.email),
-    documentKey: normalizeDocument(patient.document),
-    registeredAt: new Date().toISOString(),
-  };
-}
-
-export function getStoredAccounts() {
-  return readJson<StoredAccount[]>(ACCOUNTS_STORAGE_KEY, []);
-}
-
-export function saveStoredAccount(account: StoredAccount) {
-  const existingAccounts = getStoredAccounts().filter(
-    ({ emailKey, documentKey }) =>
-      emailKey !== account.emailKey || documentKey !== account.documentKey,
-  );
-
-  writeJson(ACCOUNTS_STORAGE_KEY, [...existingAccounts, account]);
-}
-
-export function findStoredAccount(credentials: LoginValues) {
-  const emailKey = normalizeEmail(credentials.email);
-  const documentKey = normalizeDocument(credentials.document);
-
-  return getStoredAccounts().find(
-    (account) =>
-      account.emailKey === emailKey && account.documentKey === documentKey,
-  );
+function isSessionExpired(session: AuthSession) {
+  return new Date(session.expiresAt).getTime() <= Date.now();
 }
 
 export function getActiveSession() {
-  return readJson<AuthSession | null>(SESSION_STORAGE_KEY, null);
+  const session = readJson<AuthSession | null>(SESSION_STORAGE_KEY, null);
+
+  if (!session) {
+    return null;
+  }
+
+  if (isSessionExpired(session)) {
+    return null;
+  }
+
+  return session;
 }
 
 export function saveActiveSession(session: AuthSession) {
@@ -98,6 +68,20 @@ export function clearActiveSession() {
   }
 
   window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  notifySessionListeners();
+}
+
+export function updateActiveSession(
+  updater: (session: AuthSession | null) => AuthSession | null,
+) {
+  const nextSession = updater(getActiveSession());
+
+  if (!nextSession) {
+    clearActiveSession();
+    return;
+  }
+
+  writeJson(SESSION_STORAGE_KEY, nextSession);
   notifySessionListeners();
 }
 
